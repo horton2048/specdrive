@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>待办清单 · Todo</title>
+  <style>
+    /* ---- 整体外观：居中的一张卡片 ---- */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 40px 16px;
+      background: #f4f5f7;
+      font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: #1f2328;
+    }
+    .card {
+      width: 100%;
+      max-width: 460px;
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 6px 24px rgba(0,0,0,.08);
+      padding: 24px;
+    }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    .count { color: #6a737d; font-size: 13px; margin-bottom: 16px; }
+
+    /* ---- 输入区 ---- */
+    .input-row { display: flex; gap: 8px; margin-bottom: 16px; }
+    #task-input {
+      flex: 1; padding: 10px 12px; font-size: 15px;
+      border: 1px solid #d0d7de; border-radius: 8px; outline: none;
+    }
+    #task-input:focus { border-color: #4493f8; }
+    #add-btn {
+      padding: 10px 16px; font-size: 15px; cursor: pointer;
+      border: none; border-radius: 8px; background: #1f6feb; color: #fff;
+    }
+    #add-btn:hover { background: #1a5fd0; }
+
+    /* ---- 任务列表 ---- */
+    ul { list-style: none; margin: 0; padding: 0; }
+    li {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 4px; border-bottom: 1px solid #eaecef;
+    }
+    li:last-child { border-bottom: none; }
+    li input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+    .task-text { flex: 1; font-size: 15px; }
+    li.done .task-text { text-decoration: line-through; color: #97a0a8; }
+    .del-btn {
+      border: none; background: transparent; color: #cf222e;
+      font-size: 18px; cursor: pointer; line-height: 1;
+    }
+    .empty { color: #97a0a8; font-size: 14px; text-align: center; padding: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>待办清单</h1>
+    <div class="count"><span id="remaining">0</span> 项未完成 · 数据只存在你这台浏览器里</div>
+
+    <div class="input-row">
+      <input id="task-input" type="text" placeholder="输入一件要做的事，回车添加…" autocomplete="off" />
+      <button id="add-btn">添加</button>
+    </div>
+
+    <ul id="task-list"></ul>
+  </div>
+
+  <script>
+    // ===== 状态：所有任务存在这个数组里，每项形如 { id, text, done } =====
+    // 启动时从浏览器的 localStorage(本地存储)里把上次的任务读回来；没有就用空数组。
+    let todos = JSON.parse(localStorage.getItem("todos") || "[]");
+
+    // 把当前 todos 写回浏览器本地存储，这样刷新页面也不会丢。
+    function save() {
+      localStorage.setItem("todos", JSON.stringify(todos));
+    }
+
+    const listEl = document.getElementById("task-list");
+    const remainingEl = document.getElementById("remaining");
+    const inputEl = document.getElementById("task-input");
+
+    // ===== 渲染：每次数据变了，就根据 todos 重新画一遍列表 =====
+    function render() {
+      listEl.innerHTML = ""; // 先清空，再重画
+
+      if (todos.length === 0) {
+        const empty = document.createElement("li");
+        empty.className = "empty";
+        empty.textContent = "还没有任务，添加一个吧 👆";
+        listEl.appendChild(empty);
+      }
+
+      todos.forEach(function (todo) {
+        const li = document.createElement("li");
+        if (todo.done) li.className = "done";
+
+        // 勾选框：控制完成 / 未完成
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = todo.done;
+        checkbox.addEventListener("change", function () { toggle(todo.id); });
+
+        // 任务文字：用 textContent 而不是 innerHTML，避免输入被当成网页代码执行（安全）
+        const span = document.createElement("span");
+        span.className = "task-text";
+        span.textContent = todo.text;
+
+        // 删除按钮
+        const del = document.createElement("button");
+        del.className = "del-btn";
+        del.textContent = "×";
+        del.title = "删除";
+        del.addEventListener("click", function () { remove(todo.id); });
+
+        li.appendChild(checkbox);
+        li.appendChild(span);
+        li.appendChild(del);
+        listEl.appendChild(li);
+      });
+
+      // 更新"未完成"计数
+      remainingEl.textContent = todos.filter(function (t) { return !t.done; }).length;
+    }
+
+    // ===== 添加一个任务 =====
+    function add() {
+      const text = inputEl.value.trim(); // trim() 去掉首尾空格
+      if (text === "") return;           // 空的不添加
+      todos.push({ id: Date.now(), text: text, done: false });
+      inputEl.value = "";                // 清空输入框
+      save();
+      render();
+    }
+
+    // ===== 切换完成状态 =====
+    function toggle(id) {
+      const todo = todos.find(function (t) { return t.id === id; });
+      if (todo) todo.done = !todo.done;
+      save();
+      render();
+    }
+
+    // ===== 删除任务 =====
+    function remove(id) {
+      todos = todos.filter(function (t) { return t.id !== id; });
+      save();
+      render();
+    }
+
+    // ===== 把按钮和回车键接到 add() 上 =====
+    document.getElementById("add-btn").addEventListener("click", add);
+    inputEl.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") add();
+    });
+
+    // 首次进入页面，先画一遍
+    render();
+  </script>
+</body>
+</html>

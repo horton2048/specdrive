@@ -24,6 +24,25 @@ think first    →  adversarial review  →  parallel implement  →   auto-arch
 
 The heavy lifting (scaffolding, progress, validation, archiving) is delegated to the **OpenSpec CLI** — this skill only orchestrates it.
 
+### Detailed flow
+
+Both gates are loops, and every loop has three brakes (iteration cap / no-progress / budget). Hit a brake → stop, report, hand back.
+
+```mermaid
+flowchart TD
+    A["PROPOSE<br/>produce 4 spec docs"] --> G{"Adversarial<br/>review gate"}
+    G -- "fail (hard defect)" --> R["auto-revise spec"] --> G
+    G -- pass --> AP["APPLY<br/>parallel subagents<br/>one file = one subagent"]
+    AP --> V{"Verify vs spec<br/>(external judge)"}
+    V -- failures --> F["fix subagents<br/>(parallel)"] --> V
+    V -- all pass --> AR["ARCHIVE<br/>(auto)"]
+    G -. brake .-> STOP["STOP<br/>report + hand back to human"]
+    AP -. stuck .-> STOP
+    V -. brake / not auto-verifiable .-> STOP
+```
+
+See [`examples/add-todo-app/`](./examples/) for a real, end-to-end run (the 4 spec docs + the app they produced).
+
 ## Why it's safe to run unattended
 
 - **Three hard brakes on every loop**: iteration cap, no-progress detection, budget cap. Hit one → stop, report, hand back.
@@ -59,6 +78,10 @@ cp SKILL.zh.md  ~/.claude/skills/specdrive/SKILL.md     # 中文
 Then in any project, just say: **"spec-drive a todo web app"** (or `规格驱动做一个待办网页`). It handles `openspec init` for you on first use.
 
 > Note: specdrive drives the `openspec` CLI directly, so it works immediately in any session — it does **not** depend on the `/opsx:` slash commands that `openspec init` generates.
+
+## Examples
+
+[`examples/add-todo-app/`](./examples/) is a real end-to-end run: the 4 spec docs specdrive produces (`proposal` / `specs` / `design` / `tasks`) plus the `index.html` they implemented. Good for seeing exactly what each phase outputs.
 
 ## Credit
 
