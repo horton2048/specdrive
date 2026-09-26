@@ -1,133 +1,176 @@
 # specdrive
 
-**An unattended, spec-driven development skill for [Claude Code](https://www.claude.com/product/claude-code).**
-A thin shell over [OpenSpec](https://github.com/Fission-AI/OpenSpec) that turns "build this seriously" into a disciplined, traceable, mostly-autonomous run.
+**Spec-driven development for Codex and Claude Code, with recorded verification.**
 
-*([中文说明见下方](#中文说明) / Chinese below.)*
+A thin coordination layer over [OpenSpec](https://github.com/Fission-AI/OpenSpec).
+It turns an authorized feature request into specifications, independent review,
+implementation, and evidence of what actually works.
 
----
+[中文说明](#中文说明) · [English skill](SKILL.md) · [中文 skill](SKILL.zh.md)
 
-## What it does
+## How it works
 
-`specdrive` makes Claude **think before it codes**, then run **end-to-end on its own**:
-
-```
-PROPOSE              GATE                 APPLY                    ARCHIVE
-think first    →  adversarial review  →  parallel implement  →   auto-archive
-4 spec docs       (AI gatekeeper)        + verify-fix loop        (on full pass)
+```text
+Specify → Independent review → Implement → Verify / repair → Archive when complete
+   OpenSpec artifacts              Agent work        Local check runner
 ```
 
-1. **PROPOSE** — produces 4 spec docs (`proposal` = what & why, `specs` = testable WHEN/THEN behaviors, `design` = how & trade-offs, `tasks` = checkable steps). No code yet.
-2. **GATE** — instead of stopping for you, an **adversarial-review subagent** ("nitpick, default to reject") grades the docs against a hard rubric. Fail → auto-revise → re-review. This is the soul of spec-driven dev: the gate stays, only the gatekeeper changes from human to AI.
-3. **APPLY** — dependency-aware **parallel subagents** (one file = one subagent, no same-file conflicts), then a **verify-fix loop** that checks against the spec and fixes failures until it passes.
-4. **ARCHIVE** — on full pass, auto-archives and settles specs into long-term docs.
+- **OpenSpec** owns proposal/spec/design/task artifacts, dependency order, validation,
+  progress tracking, and archiving.
+- **The host agent** plans and implements within the user's scope, delegates independent
+  workstreams when useful, repairs failures, and obtains independent review.
+- **The runner** executes configured commands, stores logs and input fingerprints,
+  checks freshness, and bounds retries/time. Missing prerequisites stay blocked.
+- **Completion** requires current behavior evidence and final review. A green runner
+  does not prove that its configuration covers every product requirement.
 
-The heavy lifting (scaffolding, progress, validation, archiving) is delegated to the **OpenSpec CLI** — this skill only orchestrates it.
+Default mode proceeds within established authorization. Say “confirm each step” to
+use an attended workflow. AI review assesses quality; it cannot authorize scope changes,
+accounts, payments, or publication on the user's behalf.
 
-### Detailed flow
+## What changed from the original skill
 
-Both gates are loops, and every loop has three brakes (iteration cap / no-progress / budget). Hit a brake → stop, report, hand back.
+The original version primarily described a Claude workflow in one long prompt.
+This version adds Codex adaptation and a small executable verification harness:
 
-```mermaid
-flowchart TD
-    A["PROPOSE<br/>produce 4 spec docs"] --> G{"Adversarial<br/>review gate"}
-    G -- "fail (hard defect)" --> R["auto-revise spec"] --> G
-    G -- pass --> AP["APPLY<br/>parallel subagents<br/>one file = one subagent"]
-    AP --> V{"Verify vs spec<br/>(external judge)"}
-    V -- failures --> F["fix subagents<br/>(parallel)"] --> V
-    V -- all pass --> AR["ARCHIVE<br/>(auto)"]
-    G -. brake .-> STOP["STOP<br/>report + hand back to human"]
-    AP -. stuck .-> STOP
-    V -. brake / not auto-verifiable .-> STOP
-```
+| Before | Now |
+| --- | --- |
+| Claude-specific tool assumptions | Host adapters using capabilities actually available |
+| All instructions loaded together | Concise bilingual skill with focused references |
+| One agent per file, maximum parallelism | Module/feature ownership, shared interface decisions, optional worktrees |
+| Retry and budget promises in prose | Persistent command attempts, timeout/no-progress limits; no claim to limit model spending |
+| Completion judged from task state | Current evidence plus independent review and explicit blocked outcomes |
+| Generic verification | Native iOS profile separating macOS core tests from simulator validation |
 
-See [`examples/add-todo-app/`](./examples/) for a real, end-to-end run (the 4 spec docs + the app they produced).
-
-## Why it's safe to run unattended
-
-- **Three hard brakes on every loop**: iteration cap, no-progress detection, budget cap. Hit one → stop, report, hand back.
-- **External-judge verification**: it runs your tests/linters and reports the *script's* result — never "it feels right."
-- **No faking**: if something can't be auto-verified (e.g. a hand-clicked HTML interaction), it labels it "not auto-verified, needs human" and surfaces — it never pretends, and never auto-archives the unverified.
-
-## Two modes
-
-- **Unattended (default)** — runs the whole pipeline without waiting on you.
-- **Attended** — say *"watch me"* / *"confirm each step"* and it stops at each gate for your sign-off.
+It is **not** an always-running model agent, a scheduler, or a sandbox. The agent must
+be active to fix code and resume checks. Cross-session autonomous execution needs a
+separately configured host service. Commands run with the host user's permissions.
 
 ## Requirements
 
-- [Claude Code](https://www.claude.com/product/claude-code)
-- [OpenSpec](https://github.com/Fission-AI/OpenSpec) installed globally:
-  ```bash
-  npm install -g @fission-ai/openspec@latest
-  ```
-  (Node.js ≥ 20.19. On a slow network add `--registry <your-mirror>`.)
+- Codex or Claude Code with filesystem and command execution capabilities.
+- Independent review capability for the review gates.
+- Node.js **>=20.19** for OpenSpec and the runner.
+- OpenSpec. The CLI integration was inspected with **1.13.2**; use the installed version's
+  help/JSON and record its version. Other releases are not implied to have been tested.
+- The actual project's development toolchain; iOS simulator validation needs full Xcode
+  and an installed iOS runtime.
 
-## Install
+If OpenSpec is not available, install a chosen version in an authorized tool location.
+For a project-local installation:
 
-Copy the skill into your Claude Code skills directory:
-
-```bash
-# pick ONE language version as SKILL.md
-mkdir -p ~/.claude/skills/specdrive
-cp SKILL.md     ~/.claude/skills/specdrive/SKILL.md     # English
-# or:
-cp SKILL.zh.md  ~/.claude/skills/specdrive/SKILL.md     # 中文
+```sh
+npm install --save-dev @fission-ai/openspec@1.13.2
+npx --no-install openspec --version
 ```
 
-Then in any project, just say: **"spec-drive a todo web app"** (or `规格驱动做一个待办网页`). It handles `openspec init` for you on first use.
+For a non-npm repository, an isolated tool directory avoids introducing unrelated package
+files. A global installation is also possible when appropriate; do not silently replace
+an existing version.
 
-> Note: specdrive drives the `openspec` CLI directly, so it works immediately in any session — it does **not** depend on the `/opsx:` slash commands that `openspec init` generates.
+## Install the complete skill
 
-## Examples
+Copying only `SKILL.md` is no longer sufficient: the skill needs `references/` and
+`scripts/`. From a checkout of this repository, choose one destination.
 
-[`examples/add-todo-app/`](./examples/) is a real end-to-end run: the 4 spec docs specdrive produces (`proposal` / `specs` / `design` / `tasks`) plus the `index.html` they implemented. Good for seeing exactly what each phase outputs.
+Codex, project-local (run in the target project's root):
 
-## Credit
+```sh
+git clone https://github.com/horton2048/specdrive.git .agents/skills/specdrive
+```
 
-The methodology and the engine come from **[OpenSpec](https://github.com/Fission-AI/OpenSpec)** (Fission-AI). `specdrive` adds three things on top: an **adversarial-review gate** (so it runs unattended), **dependency-aware parallel implementation**, and a **verify-fix loop with brakes**.
+Codex, personal:
 
-## License
+```sh
+git clone https://github.com/horton2048/specdrive.git "${CODEX_HOME:-$HOME/.codex}/skills/specdrive"
+```
 
-[MIT](./LICENSE)
+Claude Code, personal:
 
----
+```sh
+git clone https://github.com/horton2048/specdrive.git "$HOME/.claude/skills/specdrive"
+```
+
+If developing an unpublished local revision, copy the entire skill directory to the
+chosen destination instead of cloning the published repository. Preserve an existing
+installation rather than overwriting it blindly. To select Chinese, copy `SKILL.zh.md`
+over `SKILL.md` **in the installed copy**; keep both source versions maintained here.
+When committing a project-local copy, omit the source checkout's `.git` directory so
+the skill's files are tracked normally rather than as an embedded Git repository.
+
+Invoke the installed skill with “use specdrive to build …” and the intended project/scope.
+The skill drives OpenSpec directly; it does not depend on a particular slash command.
+
+## Verification runner
+
+Create a project-specific check config using [the runner reference](references/runtime.md).
+Then, with the script path pointing at your installation:
+
+```sh
+node scripts/specdrive.mjs init /path/to/checks.json --project /path/to/project
+node scripts/specdrive.mjs run /path/to/project/.specdrive/<run-id>
+node scripts/specdrive.mjs status /path/to/project/.specdrive/<run-id>
+node scripts/specdrive.mjs gate /path/to/project/.specdrive/<run-id>
+```
+
+`init` prints the new state directory. `run` makes one pass; the agent fixes failures
+between passes. Exit 0 means required checks passed, 1 failed, and 78 blocked;
+`init`/`status` exit 0 on successful execution and errors use 2.
+
+Attempts, logs, hashes, and active execution time survive invocations. Changed source
+invalidates relevant evidence. Configuration changes need a new state directory, preserving
+the old record. Do not reset state merely to bypass a limit. Read the reference for
+dependency ordering, input hashing, timeout behavior, and recovery.
+
+For native iOS, read [the iOS profile](references/ios.md). Missing Xcode is blocked even
+when `swift test` succeeds on macOS. Native build, UI interaction, and restart persistence
+need their own evidence.
+
+## Development
+
+```sh
+node --test tests/*.test.mjs
+```
+
+These tests exercise the runner, not arbitrary applications developed with it. A real
+project pilot needs its own acceptance results; no product readiness claim follows from
+this repository's tests alone. [The original todo example](examples/) is retained as an
+illustration of OpenSpec artifacts, not evidence for the new runner or iOS support.
 
 ## 中文说明
 
-**给 [Claude Code](https://www.claude.com/product/claude-code) 用的「默认无人值守」规格驱动开发 skill。**
-它是 [OpenSpec](https://github.com/Fission-AI/OpenSpec) 之上的一层薄壳，把"认真做个东西"变成一次有纪律、留痕、基本全自动的开发。
+**给 Codex 和 Claude Code 使用的规格驱动开发框架，包含可执行的验证运行器。**
 
-### 它干什么
+流程是：写规格 → 独立审核 → 实施 → 验证和修复 → 达标归档。
+OpenSpec 管理规格、依赖、任务和归档；Agent 负责开发、修复和审核；
+本地运行器执行配置好的检查，保留日志、输入哈希、尝试次数和耗时。
 
-让 Claude **先想清楚再写代码**，然后**自己一镜到底跑完**：
+本版升级了 Codex 适配、按模块分工、断点恢复和原生 iOS 验证要求。
+中英文入口分别是 [SKILL.md](SKILL.md) 和 [SKILL.zh.md](SKILL.zh.md)，共享
+[宿主流程](references/workflow.md)、[运行器说明](references/runtime.md)、
+[iOS 验证要求](references/ios.md)。
 
-```
-PROPOSE          命门              APPLY                ARCHIVE
-先想清楚    →  对抗审核把关   →   并发实现+验修闭环  →  达标自动归档
-4份说明书       (AI 当把关人)
-```
+安装必须包含整个目录，不能只复制入口文件。Codex 项目内可放在
+`.agents/skills/specdrive`，个人安装可放在 `~/.codex/skills/specdrive`；
+Claude Code 可放在 `~/.claude/skills/specdrive`。选择中文时，在安装副本中
+用 `SKILL.zh.md` 替换 `SKILL.md`。依赖 Node >=20.19 和 OpenSpec；
+本次检查过的 OpenSpec 版本为 1.13.2。
 
-1. **PROPOSE**——产出 4 份说明书（proposal 做什么&为什么 / specs 可测试的 WHEN-THEN 行为 / design 怎么做&取舍 / tasks 可打勾步骤）。先不写代码。
-2. **命门**——不停下等你，而是派一个**对抗审核分身**（"挑刺、默认不过"）按硬标准审；没过就自动改、再审。命门不拆，只是把关人从"你"换成"AI"。
-3. **APPLY**——依赖感知的**并发分身**（一个文件一个分身，杜绝同文件冲突），再走**验-修闭环**对着规格验、没过就修，直到达标。
-4. **ARCHIVE**——全部通过则自动归档，把规格沉淀进长期文档。
+“无人值守”指在已有授权内自主推进，不代表获得额外产品或发布授权。
+它没有隐藏的后台服务，也不计量或强制限制模型费用。Agent 活跃时负责修复，
+运行器每次调用执行一轮检查；跨会话继续工作需要额外配置调度或由用户恢复。
 
-重活（建文件/追踪进度/校验/归档）外包给 **OpenSpec 命令行**，本 skill 只负责指挥。
+缺少 Xcode、iOS 模拟器或有效证据时，必须保留阻塞，不能因为 macOS 上单元测试
+通过就宣称 iOS 已验收。归档要求当前检查、必需场景、外部证据和最终独立审核
+全部满足；仅有任务打勾或运行器全绿还不够。
 
-### 为什么敢无人值守
+## Credit and license
 
-- **每个循环都有三道硬刹车**：圈数封顶 / 原地踏步即停 / 预算到顶即停。撞了就停、出报告、交回你。
-- **外部裁判验证**：跑你的测试/检查器，报告**脚本的结果**，不靠"感觉对"。
-- **绝不蒙混**：没法自动验证的（如人工点的 HTML）会如实标"未自动验证、需人工确认"并浮出来，绝不假装通过、绝不把未验证的东西自动归档。
+Built on [OpenSpec](https://github.com/Fission-AI/OpenSpec) by Fission-AI.
+Specdrive adds coordination, review gates, and a local evidence runner. [MIT](LICENSE).
 
-### 两档
-- **无人值守（默认）**：整条流水线不等你跑完。
-- **盯着做**：说「盯着做 / 每步确认」，它就在每道闸停下等你点头。
+## Pilot evidence / 实测记录
 
-### 依赖 & 安装
-依赖 [OpenSpec](https://github.com/Fission-AI/OpenSpec)：`npm install -g @fission-ai/openspec@latest`（Node ≥ 20.19）。
-把 `SKILL.md`（英文）或 `SKILL.zh.md`（中文）**二选一**复制成 `~/.claude/skills/specdrive/SKILL.md` 即可。然后在任意项目说「规格驱动做一个待办网页」就会跑起来（首次会自动 `openspec init`）。
+See [the 2026-09-25 Codex and MILO validation report](docs/validation-2026-09-25.md) for executed checks, discovered defects, fixes, and platform limitations.
 
-### 致谢
-方法论与引擎来自 **[OpenSpec](https://github.com/Fission-AI/OpenSpec)**（Fission-AI）。`specdrive` 在其上加了三样：**对抗审核闸**（无人值守）、**依赖感知并发实现**、**带刹车的验-修闭环**。
+The [2026-09-26 MILO full-product parity report](docs/validation-2026-09-26-parity.md) records 53-state screenshot review, three visual-repair journey rounds, and the capture and acceptance gaps that remain open.
