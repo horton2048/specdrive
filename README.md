@@ -172,3 +172,5 @@ Specdrive adds coordination, review gates, and a local evidence runner. [MIT](LI
 ## Pilot evidence / 实测记录
 
 See [the 2026-09-25 Codex and MILO validation report](docs/validation-2026-09-25.md) for executed checks, discovered defects, fixes, and platform limitations.
+
+The [2026-09-26 MILO full-product parity report](docs/validation-2026-09-26-parity.md) records 53-state screenshot review, three visual-repair journey rounds, and the capture and acceptance gaps that remain open.
